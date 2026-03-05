@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
-// Use environment variable for API URL, fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://taskmaster-a-simple-task-management-app.onrender.com';
 
 function App() {
     const [tasks, setTasks] = useState([]);
     const [newTask, setNewTask] = useState('');
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
 
     useEffect(() => {
         fetchTasks();
@@ -18,18 +16,21 @@ function App() {
         try {
             setLoading(true);
             setError('');
+            console.log('Fetching tasks from:', `${API_URL}/api/tasks`);
+
             const response = await fetch(`${API_URL}/api/tasks`);
+            console.log('Response status:', response.status);
 
             if (!response.ok) {
-                throw new Error(`Backend returned status: ${response.status}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('Tasks received:', data);
             setTasks(data);
-            setSuccess(`Connected to backend at ${API_URL}`);
-        } catch (error) {
-            console.error('Error fetching tasks:', error);
-            setError(`Failed to connect to backend: ${error.message}. Make sure your backend is running at ${API_URL}`);
+        } catch (err) {
+            console.error('Fetch error:', err);
+            setError(`Cannot fetch tasks: ${err.message}`);
         } finally {
             setLoading(false);
         }
@@ -43,28 +44,40 @@ function App() {
 
         try {
             setError('');
+            setLoading(true);
+
+            console.log('Adding task to:', `${API_URL}/api/tasks`);
+            console.log('Task data:', { title: newTask });
+
             const response = await fetch(`${API_URL}/api/tasks`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ title: newTask.trim() })
+                body: JSON.stringify({ title: newTask })
             });
 
+            console.log('Add task response status:', response.status);
+
             if (!response.ok) {
-                throw new Error(`Failed to add task: ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const task = await response.json();
+            console.log('Task added:', task);
+
             setTasks([...tasks, task]);
             setNewTask('');
-            setSuccess('Task added successfully!');
 
-            // Clear success message after 3 seconds
-            setTimeout(() => setSuccess(''), 3000);
-        } catch (error) {
-            console.error('Error adding task:', error);
-            setError(`Error adding task: ${error.message}`);
+            // Refresh tasks to ensure we have the latest
+            fetchTasks();
+
+        } catch (err) {
+            console.error('Add task error:', err);
+            setError(`Error adding task: ${err.message}`);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -75,14 +88,19 @@ function App() {
     };
 
     return (
-        <div className="container">
-            <div className="header">
-                <h1>TaskMaster 🚀</h1>
-                <p>Manage your tasks efficiently</p>
-            </div>
+        <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Arial' }}>
+            <h1>TaskMaster 🚀</h1>
+            <p><strong>Backend URL:</strong> {API_URL}</p>
 
             {error && (
-                <div className="error">
+                <div style={{
+                    backgroundColor: '#ffebee',
+                    color: '#c62828',
+                    padding: '15px',
+                    borderRadius: '4px',
+                    marginBottom: '20px',
+                    border: '1px solid #ffcdd2'
+                }}>
                     <strong>Error:</strong> {error}
                     <button
                         onClick={fetchTasks}
@@ -101,25 +119,34 @@ function App() {
                 </div>
             )}
 
-            {success && (
-                <div className="success">
-                    ✅ {success}
-                </div>
-            )}
-
-            <div className="task-form">
+            <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
                 <input
                     type="text"
                     value={newTask}
                     onChange={(e) => setNewTask(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Enter a new task..."
-                    className="task-input"
+                    style={{
+                        flex: 1,
+                        padding: '10px',
+                        border: '2px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '16px'
+                    }}
+                    disabled={loading}
                 />
                 <button
                     onClick={addTask}
-                    className="add-button"
                     disabled={loading}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: loading ? '#ccc' : '#007acc',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        fontSize: '16px'
+                    }}
                 >
                     {loading ? 'Adding...' : 'Add Task'}
                 </button>
@@ -128,47 +155,45 @@ function App() {
             <div>
                 <h2>Your Tasks ({tasks.length})</h2>
                 {loading ? (
-                    <p className="loading">Loading tasks...</p>
+                    <p>Loading tasks...</p>
                 ) : (
-                    <ul className="task-list">
+                    <ul style={{ listStyle: 'none', padding: 0 }}>
                         {tasks.map(task => (
-                            <li key={task.id} className="task-item">
-                                <span style={{
+                            <li key={task.id} style={{
+                                padding: '15px',
+                                margin: '10px 0',
+                                backgroundColor: '#f9f9f9',
+                                borderRadius: '6px',
+                                borderLeft: '4px solid #007acc'
+                            }}>
+                                <div style={{
                                     textDecoration: task.completed ? 'line-through' : 'none',
                                     color: task.completed ? '#666' : '#333'
                                 }}>
                                     {task.title}
-                                </span>
-                                <span style={{
-                                    color: task.completed ? '#2e7d32' : '#666',
-                                    fontSize: '14px'
-                                }}>
-                                    {task.completed ? '✅ Completed' : '⏳ Pending'}
-                                </span>
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                                    ID: {task.id} • {task.completed ? 'Completed' : 'Pending'}
+                                </div>
                             </li>
                         ))}
                     </ul>
                 )}
-
-                {!loading && tasks.length === 0 && (
-                    <p style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                        No tasks yet. Add your first task above!
-                    </p>
-                )}
             </div>
 
+            {/* Debug info */}
             <div style={{
                 marginTop: '40px',
                 padding: '15px',
-                background: '#f8f9fa',
+                background: '#f0f0f0',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: '12px',
                 color: '#666'
             }}>
                 <strong>Debug Info:</strong><br />
-                API URL: {API_URL}<br />
-                Environment: {import.meta.env.MODE}<br />
-                Backend Status: {error ? '❌ Disconnected' : '✅ Connected'}
+                Open browser console (F12) to see detailed logs<br />
+                Backend: {API_URL}<br />
+                Check Network tab for request/response details
             </div>
         </div>
     );
