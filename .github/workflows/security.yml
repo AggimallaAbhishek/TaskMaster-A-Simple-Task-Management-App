@@ -1,0 +1,10 @@
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run security scan
+      uses: actions/actions-dependency-submission@v1
