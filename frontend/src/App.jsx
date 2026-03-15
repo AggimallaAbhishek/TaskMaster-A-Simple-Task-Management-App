@@ -3,6 +3,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'https://taskmaster-a-simple-task-management-app.onrender.com';
 
 function App() {
+    // Auth state
+    const [user, setUser] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [authError, setAuthError] = useState('');
+    
+    // Task state
     const [tasks, setTasks] = useState([]);
     const [newTask, setNewTask] = useState('');
     const [newPriority, setNewPriority] = useState('medium');
@@ -25,16 +31,21 @@ function App() {
     const [sortDirection, setSortDirection] = useState('asc');
 
     useEffect(() => {
+        checkAuthStatus();
         fetchTasks();
     }, []);
 
     const fetchTasks = async () => {
+        if (!user) return; // Don't fetch tasks if not logged in
+        
         try {
             setLoading(true);
             setError('');
             console.log('Fetching tasks from:', `${API_URL}/api/tasks`);
 
-            const response = await fetch(`${API_URL}/api/tasks`);
+            const response = await fetch(`${API_URL}/api/tasks`, {
+                credentials: 'include' // Important for sending cookies with the request
+            });
             console.log('Response status:', response.status);
 
             if (!response.ok) {
@@ -49,6 +60,48 @@ function App() {
             setError(`Cannot fetch tasks: ${err.message}`);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Authentication functions
+    const checkAuthStatus = async () => {
+        try {
+            setAuthLoading(true);
+            setAuthError('');
+            
+            const response = await fetch(`${API_URL}/auth/user`, {
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const userData = await response.json();
+                setUser(userData);
+            } else {
+                setUser(null);
+            }
+        } catch (err) {
+            console.error('Auth check error:', err);
+            setAuthError('Failed to check authentication status');
+            setUser(null);
+        } finally {
+            setAuthLoading(false);
+        }
+    };
+
+    const handleLogin = () => {
+        window.location.href = `${API_URL}/auth/google`;
+    };
+
+    const handleLogout = async () => {
+        try {
+            await fetch(`${API_URL}/auth/logout`, {
+                credentials: 'include'
+            });
+            setUser(null);
+            setTasks([]); // Clear tasks when logging out
+        } catch (err) {
+            console.error('Logout error:', err);
+            setAuthError('Failed to logout');
         }
     };
 
@@ -222,8 +275,60 @@ const updateTask = async (taskId, updates) => {
 
     return (
         <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Arial' }}>
-            <h1>TaskMaster 🚀</h1>
-            <p><strong>Backend URL:</strong> {API_URL}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h1>TaskMaster 🚀</h1>
+                <div>
+                    {authLoading ? (
+                        <span>Checking authentication...</span>
+                    ) : (
+                        <>
+                            {user ? (
+                                <>
+                                    <span>Logged in as: {user.username}</span>
+                                    <button
+                                        onClick={handleLogout}
+                                        style={{
+                                            marginLeft: '10px',
+                                            padding: '6px 12px',
+                                            backgroundColor: '#dc3545',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Logout
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    onClick={handleLogin}
+                                    style={{
+                                        padding: '6px 12px',
+                                        backgroundColor: '#4285f4',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Login with Google
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+            
+            {!user && (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                    <p>Please log in to access your tasks</p>
+                </div>
+            )}
+            
+            {user && (
+                <>
+                    <p><strong>Backend URL:</strong> {API_URL}</p>
 
             {error && (
                 <div style={{
