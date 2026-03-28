@@ -4,8 +4,18 @@ const { Pool } = require('pg');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// PostgreSQL database connection - define early for session store
+const pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    user: process.env.DB_USER || 'aggimallaabhishek',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'taskmaster'
+});
 
 // Enhanced CORS middleware - FIXED FOR PREFLIGHT
 app.use((req, res, next) => {
@@ -46,8 +56,13 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session middleware
+// Session middleware with PostgreSQL store
 app.use(session({
+    store: new PgSession({
+        pool: pool,
+        tableName: 'session',
+        createTableIfMissing: true
+    }),
     secret: process.env.SESSION_SECRET || 'taskmaster-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
@@ -121,15 +136,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     console.warn('⚠️  Google OAuth credentials not configured. OAuth will be disabled.');
 }
 
-// PostgreSQL database connection
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'aggimallaabhishek',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'taskmaster'
-});
-
 // Initialize database with tables - drop and recreate for development
 const initializeDatabase = async () => {
     try {
@@ -164,31 +170,12 @@ const initializeDatabase = async () => {
             )
         `);
 
-        // Insert initial test user for development/testing
-        await pool.query(
-            'INSERT INTO users (username, email, google_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-            ['testuser', 'test@example.com', 'test-google-id']
-        );
-
         console.log('Database initialized successfully');
     } catch (error) {
         console.error('Error initializing database:', error);
         throw error; // Re-throw to prevent server start if DB init fails
     }
 };
-
-// Initialize database on module load (for testing) or when running as main
-(async () => {
-    try {
-        await initializeDatabase();
-    } catch (error) {
-        if (require.main === module) {
-            console.error('Failed to initialize database:', error);
-            process.exit(1);
-        }
-        // For tests, continue even if initialization fails
-    }
-})();
 
 // Export the app for use in tests
 module.exports = app;
@@ -197,11 +184,12 @@ module.exports = app;
 if (require.main === module) {
     const startServer = async () => {
         try {
+            // Initialize database on production startup
             await initializeDatabase();
-            
+
             app.listen(PORT, () => {
                 console.log('====================================');
-                console.log('🚀 TaskMaster Server with CORS Fix');
+                console.log('🚀 TaskMaster Server');
                 console.log('====================================');
                 console.log(`Port: ${PORT}`);
                 console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
