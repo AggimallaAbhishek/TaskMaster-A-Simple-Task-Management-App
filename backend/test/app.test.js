@@ -180,4 +180,65 @@ describe('TaskMaster API', () => {
         expect(res.body.category).toEqual('general');
         expect(res.body.completed).toBe(false);
     });
+
+    // ===== PROFILE MANAGEMENT TESTS =====
+    it('should get user profile with all fields', async () => {
+        const res = await request(app).get('/api/users/profile');
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body).toHaveProperty('id');
+        expect(res.body).toHaveProperty('username');
+        expect(res.body).toHaveProperty('email');
+        expect(res.body).toHaveProperty('theme');
+        expect(res.body).toHaveProperty('notifications_enabled');
+    });
+
+    it('should update user profile', async () => {
+        const res = await request(app)
+            .put('/api/users/profile')
+            .send({
+                bio: 'Test bio',
+                theme: 'dark',
+                notifications_enabled: false,
+            });
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.bio).toEqual('Test bio');
+        expect(res.body.theme).toEqual('dark');
+        expect(res.body.notifications_enabled).toBe(false);
+    });
+
+    it('should update profile with partial fields', async () => {
+        const res = await request(app)
+            .put('/api/users/profile')
+            .send({ bio: 'Just bio update' });
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.bio).toEqual('Just bio update');
+    });
+
+    it('should delete user avatar', async () => {
+        const res = await request(app)
+            .delete('/api/users/avatar');
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.message).toEqual('Avatar deleted successfully');
+        expect(res.body.user.avatar_path).toBeNull();
+    });
+
+    it('should preserve existing profile data when updating bio', async () => {
+        // First, set theme
+        await request(app)
+            .put('/api/users/profile')
+            .send({ theme: 'dark' });
+
+        // Then update only bio
+        const res = await request(app)
+            .put('/api/users/profile')
+            .send({ bio: 'New bio' });
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.theme).toEqual('dark');
+        expect(res.body.bio).toEqual('New bio');
+    });
 });

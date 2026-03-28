@@ -25,7 +25,12 @@ beforeAll(async () => {
                 email VARCHAR(255) UNIQUE NOT NULL,
                 google_id VARCHAR(255) UNIQUE,
                 picture VARCHAR(500),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                bio TEXT,
+                theme VARCHAR(20) DEFAULT 'light',
+                notifications_enabled BOOLEAN DEFAULT true,
+                avatar_path VARCHAR(500),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         `);
 

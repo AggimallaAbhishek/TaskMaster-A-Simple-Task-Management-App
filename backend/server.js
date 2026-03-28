@@ -151,7 +151,12 @@ const initializeDatabase = async () => {
                 email VARCHAR(255) UNIQUE NOT NULL,
                 google_id VARCHAR(255) UNIQUE,
                 picture VARCHAR(500),
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                bio TEXT,
+                theme VARCHAR(20) DEFAULT 'light',
+                notifications_enabled BOOLEAN DEFAULT true,
+                avatar_path VARCHAR(500),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
@@ -416,6 +421,73 @@ app.delete('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
     }
 });
 
+
+// ========== PROFILE MANAGEMENT ENDPOINTS ==========
+
+// Get user profile with all details
+app.get('/api/users/profile', ensureAuthenticated, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, username, email, picture, bio, theme, notifications_enabled, avatar_path, created_at, updated_at FROM users WHERE id = $1',
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Update user profile
+app.put('/api/users/profile', ensureAuthenticated, async (req, res) => {
+    const { bio, theme, notifications_enabled } = req.body;
+
+    try {
+        const result = await pool.query(
+            `UPDATE users
+             SET bio = COALESCE($1, bio),
+                 theme = COALESCE($2, theme),
+                 notifications_enabled = COALESCE($3, notifications_enabled),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4
+             RETURNING *`,
+            [bio, theme, notifications_enabled, req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete user avatar
+app.delete('/api/users/avatar', ensureAuthenticated, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'UPDATE users SET avatar_path = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ message: 'Avatar deleted successfully', user: result.rows[0] });
+    } catch (error) {
+        console.error('Error deleting avatar:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // Handle undefined routes
 app.use('*', (req, res) => {
