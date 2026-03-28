@@ -5,6 +5,7 @@ import { AuthPanel } from './components/Auth/AuthPanel';
 import { TaskForm } from './components/Tasks/TaskForm';
 import { TaskList } from './components/Tasks/TaskList';
 import { ProfilePanel } from './components/Profile/ProfilePanel';
+import { PhysicsPlayground } from './components/Playground/PhysicsPlayground';
 import { SkipToMainContent } from './components/Accessible';
 import apiClient from './api/client';
 import { COLORS } from './styles/theme';
@@ -22,6 +23,9 @@ function AppContent() {
         setTasks,
         user
     );
+
+    // Page navigation state
+    const [currentPage, setCurrentPage] = useState('tasks'); // 'tasks' or 'playground'
 
     // Profile panel state
     const [showProfilePanel, setShowProfilePanel] = useState(false);
@@ -154,6 +158,51 @@ function AppContent() {
                 onSettings={() => setShowProfilePanel(true)}
             />
 
+            {/* Page Navigation Buttons */}
+            {user && (
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: '10px',
+                        marginBottom: '20px',
+                        justifyContent: 'center',
+                    }}
+                >
+                    <button
+                        onClick={() => setCurrentPage('tasks')}
+                        style={{
+                            padding: '10px 20px',
+                            backgroundColor: currentPage === 'tasks' ? COLORS.PRIMARY : COLORS.GRAY,
+                            color: COLORS.TEXT_WHITE,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: currentPage === 'tasks' ? 'bold' : 'normal',
+                            transition: 'background-color 0.2s ease',
+                        }}
+                    >
+                        📋 Tasks
+                    </button>
+                    <button
+                        onClick={() => setCurrentPage('playground')}
+                        style={{
+                            padding: '10px 20px',
+                            backgroundColor: currentPage === 'playground' ? COLORS.PRIMARY : COLORS.GRAY,
+                            color: COLORS.TEXT_WHITE,
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: currentPage === 'playground' ? 'bold' : 'normal',
+                            transition: 'background-color 0.2s ease',
+                        }}
+                    >
+                        🎮 Physics Playground
+                    </button>
+                </div>
+            )}
+
             <main id="main-content">
                 {!user ? (
                     <div
@@ -165,6 +214,8 @@ function AppContent() {
                     >
                         <p>Please log in to access your tasks</p>
                     </div>
+                ) : currentPage === 'playground' ? (
+                    <PhysicsPlayground />
                 ) : (
                     <>
                         <TaskForm
