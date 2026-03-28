@@ -35,16 +35,9 @@ export function useAuth() {
             setError('');
 
             if (demoMode) {
-                // Demo mode: create a demo user without OAuth
-                const demoUser = {
-                    id: 'demo-user',
-                    username: 'Demo User',
-                    email: 'demo@taskmaster.local',
-                    picture: null,
-                };
-                setUser(demoUser);
-                localStorage.setItem('demo_mode', 'true');
-                localStorage.setItem('demo_user', JSON.stringify(demoUser));
+                // Demo mode: call /auth/demo endpoint and then check auth
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                window.location.href = `${API_URL}/auth/demo`;
             } else {
                 // Google OAuth mode
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -61,18 +54,10 @@ export function useAuth() {
     const logout = async () => {
         try {
             setLoading(true);
-            const isDemo = localStorage.getItem('demo_mode') === 'true';
-
-            if (isDemo) {
-                // Demo mode logout
-                localStorage.removeItem('demo_mode');
-                localStorage.removeItem('demo_user');
-                setUser(null);
-            } else {
-                // OAuth logout
-                await apiClient.logout();
-                setUser(null);
-            }
+            await apiClient.logout();
+            setUser(null);
+            // Redirect to home after logout
+            window.location.href = '/';
         } catch (err) {
             console.error('Logout error:', err);
             setError('Failed to logout');
@@ -89,4 +74,5 @@ export function useAuth() {
         logout,
     };
 }
+
 
