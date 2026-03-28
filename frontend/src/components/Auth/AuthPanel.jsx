@@ -1,7 +1,7 @@
 import React from 'react';
 import { COLORS } from '../../styles/theme';
 
-export function AuthPanel({ user, loading, onLogin, onLogout }) {
+export function AuthPanel({ user, loading, onLogin, onLogout, onSettings }) {
     return (
         <div
             style={{
@@ -12,7 +12,13 @@ export function AuthPanel({ user, loading, onLogin, onLogout }) {
             }}
         >
             <h1>TaskMaster 🚀</h1>
-            <div>
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                }}
+            >
                 {loading ? (
                     <span>Checking authentication...</span>
                 ) : (
@@ -20,10 +26,25 @@ export function AuthPanel({ user, loading, onLogin, onLogout }) {
                         {user ? (
                             <>
                                 <span>Logged in as: {user.username}</span>
+                                {onSettings && (
+                                    <button
+                                        onClick={onSettings}
+                                        style={{
+                                            padding: '6px 12px',
+                                            backgroundColor: COLORS.PRIMARY,
+                                            color: COLORS.TEXT_WHITE,
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                        }}
+                                        aria-label="Open profile settings"
+                                    >
+                                        Settings
+                                    </button>
+                                )}
                                 <button
                                     onClick={onLogout}
                                     style={{
-                                        marginLeft: '10px',
                                         padding: '6px 12px',
                                         backgroundColor: COLORS.DANGER,
                                         color: COLORS.TEXT_WHITE,

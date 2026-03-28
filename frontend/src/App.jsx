@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth, useTasks, useFilter } from './hooks';
+import { useAuth, useTasks, useFilter, useProfile } from './hooks';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPanel } from './components/Auth/AuthPanel';
 import { TaskForm } from './components/Tasks/TaskForm';
 import { TaskList } from './components/Tasks/TaskList';
+import { ProfilePanel } from './components/Profile/ProfilePanel';
 import { SkipToMainContent } from './components/Accessible';
 import apiClient from './api/client';
 import { COLORS } from './styles/theme';
@@ -14,12 +15,16 @@ const API_URL =
 
 function AppContent() {
     const { user, loading: authLoading, login, logout } = useAuth();
+    const { profile, loading: profileLoading, error: profileError, fetchProfile, updateProfile, deleteAvatar } = useProfile();
     const [tasks, setTasks] = useState([]);
     const { loading, error, setError, fetchTasks, addTask, updateTask, deleteTask } = useTasks(
         tasks,
         setTasks,
         user
     );
+
+    // Profile panel state
+    const [showProfilePanel, setShowProfilePanel] = useState(false);
 
     // New task form state
     const [newTask, setNewTask] = useState('');
@@ -52,8 +57,9 @@ function AppContent() {
     useEffect(() => {
         if (user) {
             fetchTasks();
+            fetchProfile();
         }
-    }, [user, fetchTasks]);
+    }, [user, fetchTasks, fetchProfile]);
 
     // Handle add task
     const handleAddTask = async () => {
@@ -145,6 +151,7 @@ function AppContent() {
                 loading={authLoading}
                 onLogin={login}
                 onLogout={logout}
+                onSettings={() => setShowProfilePanel(true)}
             />
 
             <main id="main-content">
@@ -209,6 +216,76 @@ function AppContent() {
                     </>
                 )}
             </main>
+
+            {/* Profile Settings Modal */}
+            {user && showProfilePanel && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 1000,
+                    }}
+                    onClick={() => setShowProfilePanel(false)}
+                    role="presentation"
+                >
+                    <div
+                        style={{
+                            backgroundColor: 'white',
+                            borderRadius: '8px',
+                            padding: '24px',
+                            maxWidth: '500px',
+                            width: '90%',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div
+                            style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '20px',
+                            }}
+                        >
+                            <h2>Profile Settings</h2>
+                            <button
+                                onClick={() => setShowProfilePanel(false)}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '24px',
+                                    cursor: 'pointer',
+                                    padding: '0',
+                                    color: COLORS.TEXT_MUTED,
+                                }}
+                                aria-label="Close profile settings"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <ProfilePanel
+                            profile={profile}
+                            loading={profileLoading}
+                            error={profileError}
+                            onFetch={fetchProfile}
+                            onUpdate={async (updates) => {
+                                await updateProfile(updates);
+                                setShowProfilePanel(false);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

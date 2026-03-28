@@ -6,6 +6,7 @@ import { AuthPanel } from '../AuthPanel';
 describe('AuthPanel Component', () => {
   const mockOnLogin = vi.fn();
   const mockOnLogout = vi.fn();
+  const mockOnSettings = vi.fn();
 
   it('should render login button when no user', () => {
     render(
@@ -88,5 +89,56 @@ describe('AuthPanel Component', () => {
     await user.click(logoutButton);
 
     expect(mockOnLogout).toHaveBeenCalledOnce();
+  });
+
+  it('should render settings button when user is authenticated and onSettings provided', () => {
+    const authUser = { id: 1, username: 'testuser' };
+
+    render(
+      <AuthPanel
+        user={authUser}
+        loading={false}
+        onLogin={mockOnLogin}
+        onLogout={mockOnLogout}
+        onSettings={mockOnSettings}
+      />
+    );
+
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+  });
+
+  it('should not render settings button when onSettings not provided', () => {
+    const authUser = { id: 1, username: 'testuser' };
+
+    render(
+      <AuthPanel
+        user={authUser}
+        loading={false}
+        onLogin={mockOnLogin}
+        onLogout={mockOnLogout}
+      />
+    );
+
+    expect(screen.queryByText('Settings')).not.toBeInTheDocument();
+  });
+
+  it('should call onSettings when settings button clicked', async () => {
+    const user = userEvent.setup();
+    const authUser = { id: 1, username: 'testuser' };
+
+    render(
+      <AuthPanel
+        user={authUser}
+        loading={false}
+        onLogin={mockOnLogin}
+        onLogout={mockOnLogout}
+        onSettings={mockOnSettings}
+      />
+    );
+
+    const settingsButton = screen.getByText('Settings');
+    await user.click(settingsButton);
+
+    expect(mockOnSettings).toHaveBeenCalledOnce();
   });
 });
