@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DateRangePicker } from '../DateRangePicker';
@@ -127,11 +127,15 @@ describe('PresetManager Component', () => {
     },
   ];
 
-  const mockCallbacks = {
-    onSavePreset: vi.fn(),
-    onLoadPreset: vi.fn(),
-    onDeletePreset: vi.fn(),
-  };
+  let mockCallbacks;
+
+  beforeEach(() => {
+    mockCallbacks = {
+      onSavePreset: vi.fn(),
+      onLoadPreset: vi.fn(),
+      onDeletePreset: vi.fn(),
+    };
+  });
 
   it('should render save preset button', () => {
     render(
