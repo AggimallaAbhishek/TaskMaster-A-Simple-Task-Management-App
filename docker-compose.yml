@@ -3,6 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: taskmaster-postgres
     environment:
       - POSTGRES_USER=aggimallaabhishek
       - POSTGRES_PASSWORD=taskmaster_dev_password
@@ -17,9 +18,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - taskmaster-network
 
   backend:
     build: ./backend
+    container_name: taskmaster-backend
     ports:
       - "5000:5000"
     environment:
@@ -30,21 +34,43 @@ services:
       - DB_USER=aggimallaabhishek
       - DB_PASSWORD=taskmaster_dev_password
       - DB_NAME=taskmaster
+      - DB_POOL_MIN=2
+      - DB_POOL_MAX=10
+      - SESSION_SECRET=docker-dev-secret-key-change-in-production
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=json
+      - CORS_ORIGIN=http://localhost:3000
+      - FRONTEND_URL_DEV=http://localhost:3000
     volumes:
       - ./backend:/app
       - /app/node_modules
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - taskmaster-network
+    restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:5000
+    container_name: taskmaster-frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
     environment:
       - VITE_API_URL=http://localhost:5000
+    networks:
+      - taskmaster-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  taskmaster-network:
+    driver: bridge
+
