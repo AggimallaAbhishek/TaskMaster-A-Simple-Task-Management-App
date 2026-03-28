@@ -12,8 +12,18 @@ const PORT = process.env.PORT || 5000;
 const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_NAME', 'SESSION_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-if (missingEnvVars.length > 0 && process.env.NODE_ENV === 'production') {
-    console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+if (missingEnvVars.length > 0) {
+    if (process.env.NODE_ENV === 'production') {
+        console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+        process.exit(1);
+    } else {
+        console.warn('⚠️  Missing environment variables (dev mode):', missingEnvVars.join(', '));
+    }
+}
+
+// CRITICAL: SESSION_SECRET must be set in production
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+    console.error('❌ FATAL: SESSION_SECRET is required in production');
     process.exit(1);
 }
 
@@ -68,7 +78,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Enhanced CORS middleware - Always set headers for proper cross-origin requests
+// Enhanced CORS middleware - Secure configuration
 app.use((req, res, next) => {
     const allowedOrigins = [];
     const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -77,6 +87,9 @@ app.use((req, res, next) => {
     if (process.env.CORS_ORIGIN) {
         allowedOrigins.push(process.env.CORS_ORIGIN);
     }
+    if (process.env.FRONTEND_URL) {
+        allowedOrigins.push(process.env.FRONTEND_URL);
+    }
     if (process.env.FRONTEND_URL_DEV && isDevelopment) {
         allowedOrigins.push(process.env.FRONTEND_URL_DEV);
     }
@@ -84,35 +97,37 @@ app.use((req, res, next) => {
         allowedOrigins.push(process.env.FRONTEND_URL_PROD);
     }
 
-    // Default development origins
+    // Default development origins (only in dev mode)
     if (isDevelopment) {
-        allowedOrigins.push('http://localhost:5173', 'http://localhost:3000');
+        allowedOrigins.push('http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173');
     }
 
     const origin = req.headers.origin;
-
-    // Determine the origin to send back
-    let corsOrigin = '*'; // Default to wildcard for development
-    let credentials = 'true';
+    let corsOrigin = null;
 
     if (origin && allowedOrigins.includes(origin)) {
         // Specific origin allowed
         corsOrigin = origin;
-    } else if (isDevelopment) {
-        // Development: allow all
-        corsOrigin = '*';
-    } else if (allowedOrigins.length > 0) {
-        // Production: only set if origin is in list
-        corsOrigin = allowedOrigins[0] || '*';
+    } else if (isDevelopment && origin) {
+        // Development: allow the requesting origin (but not wildcard with credentials)
+        corsOrigin = origin;
+    } else if (isDevelopment && !origin) {
+        // Same-origin or non-browser request in dev
+        corsOrigin = allowedOrigins[0] || 'http://localhost:5173';
+    } else if (!isDevelopment && allowedOrigins.length > 0) {
+        // Production: only allow configured origins
+        corsOrigin = origin && allowedOrigins.includes(origin) ? origin : null;
     }
 
-    // Always set CORS headers for development/testing
-    res.header('Access-Control-Allow-Origin', corsOrigin);
-    res.header('Access-Control-Allow-Credentials', credentials);
-    res.header('Access-Control-Allow-Headers',
-        'Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    // Only set CORS headers if we have a valid origin
+    if (corsOrigin) {
+        res.header('Access-Control-Allow-Origin', corsOrigin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Access-Control-Allow-Headers',
+            'Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    }
 
     // Handle OPTIONS preflight requests
     if (req.method === 'OPTIONS') {
@@ -131,17 +146,24 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Session middleware with PostgreSQL store
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret && process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET environment variable is required in production');
+}
+
 app.use(session({
     store: new PgSession({
         pool: pool,
         tableName: 'session',
         createTableIfMissing: true
     }),
-    secret: process.env.SESSION_SECRET || 'taskmaster-secret-key-change-in-production',
+    secret: sessionSecret || 'dev-only-secret-not-for-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: process.env.NODE_ENV === 'production', // HTTPS in production
+        httpOnly: true, // Prevent XSS access to cookies
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
@@ -176,6 +198,14 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         passReqToCallback: true
     }, async (request, accessToken, refreshToken, profile, done) => {
     try {
+        // Validate profile data exists
+        const email = profile.emails?.[0]?.value;
+        const photo = profile.photos?.[0]?.value || null;
+        
+        if (!email) {
+            return done(new Error('No email provided by Google OAuth'), null);
+        }
+
         // Check if user already exists in our database
         let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [profile.id]);
         
@@ -184,20 +214,20 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             return done(null, result.rows[0]);
         } else {
             // Check if user exists with email
-            result = await pool.query('SELECT * FROM users WHERE email = $1', [profile.emails[0].value]);
+            result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
             
             if (result.rows.length > 0) {
                 // User exists with email, update with Google ID
                 const updateResult = await pool.query(
                     'UPDATE users SET google_id = $1, picture = $2 WHERE id = $3 RETURNING *',
-                    [profile.id, profile.photos[0].value, result.rows[0].id]
+                    [profile.id, photo, result.rows[0].id]
                 );
                 return done(null, updateResult.rows[0]);
             } else {
                 // Create new user
                 const newUser = await pool.query(
                     'INSERT INTO users (username, email, google_id, picture) VALUES ($1, $2, $3, $4) RETURNING *',
-                    [profile.displayName, profile.emails[0].value, profile.id, profile.photos[0].value]
+                    [profile.displayName, email, profile.id, photo]
                 );
                 return done(null, newUser.rows[0]);
             }
@@ -210,17 +240,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     console.warn('⚠️  Google OAuth credentials not configured. OAuth will be disabled.');
 }
 
-// Initialize database with tables - drop and recreate for development
+// Initialize database with tables - safe migration (no data loss)
 const initializeDatabase = async () => {
     try {
-        // Drop tables in reverse order of dependencies
-        await pool.query('DROP TABLE IF EXISTS filter_presets');
-        await pool.query('DROP TABLE IF EXISTS tasks');
-        await pool.query('DROP TABLE IF EXISTS users');
-
-        // Create users table
+        // Create users table if not exists
         await pool.query(`
-            CREATE TABLE users (
+            CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(255) NOT NULL,
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -235,24 +260,24 @@ const initializeDatabase = async () => {
             )
         `);
 
-        // Create tasks table with user_id foreign key
+        // Create tasks table if not exists
         await pool.query(`
-            CREATE TABLE tasks (
+            CREATE TABLE IF NOT EXISTS tasks (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255) NOT NULL,
                 completed BOOLEAN DEFAULT FALSE,
                 priority VARCHAR(20) DEFAULT 'medium',
                 category VARCHAR(100) DEFAULT 'general',
                 due_date TIMESTAMP WITH TIME ZONE,
-                user_id INTEGER REFERENCES users(id),
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
-        // Create filter_presets table for saving custom filters
+        // Create filter_presets table if not exists
         await pool.query(`
-            CREATE TABLE filter_presets (
+            CREATE TABLE IF NOT EXISTS filter_presets (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 name VARCHAR(255) NOT NULL,
@@ -264,9 +289,16 @@ const initializeDatabase = async () => {
             )
         `);
 
-        console.log('Database initialized successfully');
+        // Create indexes for better query performance (IF NOT EXISTS)
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_filter_presets_user_id ON filter_presets(user_id)`);
+
+        console.log('✅ Database initialized successfully (tables and indexes created if needed)');
     } catch (error) {
-        console.error('Error initializing database:', error);
+        console.error('❌ Error initializing database:', error);
         throw error; // Re-throw to prevent server start if DB init fails
     }
 };
@@ -276,12 +308,14 @@ module.exports = app;
 
 // Start the server if this file is run directly
 if (require.main === module) {
+    let server;
+    
     const startServer = async () => {
         try {
-            // Initialize database on production startup
+            // Initialize database on startup
             await initializeDatabase();
 
-            app.listen(PORT, () => {
+            server = app.listen(PORT, () => {
                 console.log('====================================');
                 console.log('🚀 TaskMaster Server');
                 console.log('====================================');
@@ -295,6 +329,37 @@ if (require.main === module) {
             process.exit(1);
         }
     };
+
+    // Graceful shutdown handler
+    const gracefulShutdown = async (signal) => {
+        console.log(`\n${signal} received. Starting graceful shutdown...`);
+        
+        if (server) {
+            server.close(async () => {
+                console.log('HTTP server closed.');
+                try {
+                    await pool.end();
+                    console.log('Database pool closed.');
+                    process.exit(0);
+                } catch (err) {
+                    console.error('Error closing database pool:', err);
+                    process.exit(1);
+                }
+            });
+            
+            // Force close after 10 seconds
+            setTimeout(() => {
+                console.error('Forced shutdown after timeout');
+                process.exit(1);
+            }, 10000);
+        } else {
+            process.exit(0);
+        }
+    };
+
+    // Handle shutdown signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
     startServer().catch(console.error);
 }
@@ -310,7 +375,8 @@ app.get('/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/' }),
     (req, res) => {
         // Successful authentication, redirect to frontend
-        res.redirect('http://localhost:5173/');
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        res.redirect(frontendUrl);
     }
 );
 
@@ -336,7 +402,8 @@ if (process.env.NODE_ENV !== 'production' && !process.env.GOOGLE_CLIENT_ID) {
                     console.error('Login error:', err);
                     return res.redirect('/?error=login_failed');
                 }
-                res.redirect('http://localhost:5173/');
+                const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                res.redirect(frontendUrl);
             });
         } catch (error) {
             console.error('Demo auth error:', error);
@@ -765,8 +832,9 @@ app.post('/api/filter-presets/:id/apply', ensureAuthenticated, async (req, res) 
             paramCount++;
         }
 
-        // Apply sort
-        if (filterConfig.sortBy) {
+        // Apply sort - WHITELIST allowed columns to prevent SQL injection
+        const allowedSortColumns = ['created_at', 'updated_at', 'due_date', 'title', 'priority', 'completed'];
+        if (filterConfig.sortBy && allowedSortColumns.includes(filterConfig.sortBy)) {
             const sortDir = filterConfig.sortDirection === 'desc' ? 'DESC' : 'ASC';
             query += ` ORDER BY ${filterConfig.sortBy} ${sortDir}`;
         } else {

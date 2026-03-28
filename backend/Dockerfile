@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
 WORKDIR /app
 
 # Copy package files
@@ -9,22 +12,18 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Copy application files
-COPY . .
+COPY --chown=nodejs:nodejs . .
 
-# Create .env file with Docker defaults if not present
-RUN if [ ! -f .env ]; then \
-    echo "NODE_ENV=development" > .env && \
-    echo "PORT=5000" >> .env && \
-    echo "DB_HOST=postgres" >> .env && \
-    echo "DB_PORT=5432" >> .env && \
-    echo "DB_USER=aggimallaabhishek" >> .env && \
-    echo "DB_PASSWORD=taskmaster_dev_password" >> .env && \
-    echo "DB_NAME=taskmaster" >> .env && \
-    echo "SESSION_SECRET=docker-dev-secret-key-change-in-production" >> .env && \
-    echo "LOG_LEVEL=debug" >> .env && \
-    echo "LOG_FORMAT=json" >> .env; \
-    fi
+# Note: Environment variables should be provided at runtime, not baked into the image
+# Do NOT include secrets in Dockerfile
+
+# Switch to non-root user
+USER nodejs
 
 EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
 
 CMD ["npm", "start"]

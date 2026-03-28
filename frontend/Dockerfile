@@ -14,8 +14,18 @@ RUN npm run build
 
 # Production stage
 FROM nginx:alpine
+
+# Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Use nginx user (non-root)
+USER nginx
+
 EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
