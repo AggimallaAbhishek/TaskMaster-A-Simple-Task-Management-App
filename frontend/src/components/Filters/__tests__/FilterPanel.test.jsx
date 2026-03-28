@@ -1,19 +1,42 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FilterPanel } from '../FilterPanel';
 
+// Mock the usePresets hook
+vi.mock('../../../hooks', () => ({
+  usePresets: () => ({
+    presets: [],
+    loading: false,
+    fetchPresets: vi.fn(),
+    createPreset: vi.fn(async () => ({ id: 1, name: 'Test Preset' })),
+    updatePreset: vi.fn(),
+    deletePreset: vi.fn(),
+    applyPreset: vi.fn(async () => ({ preset: {}, tasks: [] })),
+  }),
+}));
+
 describe('FilterPanel Component', () => {
-  const mockFilter = {
-    search: '',
-    priority: '',
-    category: '',
-    completed: '',
-  };
-  const mockOnFilterChange = vi.fn();
-  const mockOnSortByChange = vi.fn();
-  const mockOnSortDirectionChange = vi.fn();
-  const mockOnReset = vi.fn();
+  let mockFilter;
+  let mockOnFilterChange;
+  let mockOnSortByChange;
+  let mockOnSortDirectionChange;
+  let mockOnReset;
+
+  beforeEach(() => {
+    mockFilter = {
+      search: '',
+      priority: '',
+      category: '',
+      completed: '',
+      dueDateFrom: '',
+      dueDateTo: '',
+    };
+    mockOnFilterChange = vi.fn();
+    mockOnSortByChange = vi.fn();
+    mockOnSortDirectionChange = vi.fn();
+    mockOnReset = vi.fn();
+  });
 
   it('should render all filter controls', () => {
     render(
@@ -32,6 +55,22 @@ describe('FilterPanel Component', () => {
     expect(screen.getByDisplayValue('All Priorities')).toBeInTheDocument();
     expect(screen.getByDisplayValue('All Categories')).toBeInTheDocument();
     expect(screen.getByDisplayValue('All Tasks')).toBeInTheDocument();
+  });
+
+  it('should render Advanced button', () => {
+    render(
+      <FilterPanel
+        filter={mockFilter}
+        onFilterChange={mockOnFilterChange}
+        sortBy="id"
+        onSortByChange={mockOnSortByChange}
+        sortDirection="asc"
+        onSortDirectionChange={mockOnSortDirectionChange}
+        onReset={mockOnReset}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /advanced/i })).toBeInTheDocument();
   });
 
   it('should update search filter', async () => {
@@ -145,5 +184,90 @@ describe('FilterPanel Component', () => {
     await user.selectOptions(sortDirectionSelect, 'desc');
 
     expect(mockOnSortDirectionChange).toHaveBeenCalled();
+  });
+
+  it('should show advanced filters when Advanced button clicked', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FilterPanel
+        filter={mockFilter}
+        onFilterChange={mockOnFilterChange}
+        sortBy="id"
+        onSortByChange={mockOnSortByChange}
+        sortDirection="asc"
+        onSortDirectionChange={mockOnSortDirectionChange}
+        onReset={mockOnReset}
+      />
+    );
+
+    const advancedButton = screen.getByRole('button', { name: /advanced/i });
+    await user.click(advancedButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Due Date Range')).toBeInTheDocument();
+      expect(screen.getByText('Filter Presets')).toBeInTheDocument();
+    });
+  });
+
+  it('should hide advanced filters when Hide Advanced button clicked', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FilterPanel
+        filter={mockFilter}
+        onFilterChange={mockOnFilterChange}
+        sortBy="id"
+        onSortByChange={mockOnSortByChange}
+        sortDirection="asc"
+        onSortDirectionChange={mockOnSortDirectionChange}
+        onReset={mockOnReset}
+      />
+    );
+
+    // Open advanced
+    let advancedButton = screen.getByRole('button', { name: /advanced/i });
+    await user.click(advancedButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Due Date Range')).toBeInTheDocument();
+    });
+
+    // Close advanced
+    advancedButton = screen.getByRole('button', { name: /hide advanced/i });
+    await user.click(advancedButton);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Due Date Range')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should update date range when dates are set', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FilterPanel
+        filter={mockFilter}
+        onFilterChange={mockOnFilterChange}
+        sortBy="id"
+        onSortByChange={mockOnSortByChange}
+        sortDirection="asc"
+        onSortDirectionChange={mockOnSortDirectionChange}
+        onReset={mockOnReset}
+      />
+    );
+
+    // Open advanced
+    const advancedButton = screen.getByRole('button', { name: /advanced/i });
+    await user.click(advancedButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Start date for date range filter')).toBeInTheDocument();
+    });
+
+    const startDateInput = screen.getByLabelText('Start date for date range filter');
+    await user.type(startDateInput, '2024-03-24');
+
+    expect(mockOnFilterChange).toHaveBeenCalled();
   });
 });
