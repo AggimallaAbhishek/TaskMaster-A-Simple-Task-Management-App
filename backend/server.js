@@ -5,6 +5,10 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
+const helmet = require('helmet');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -52,6 +56,45 @@ pool.on('connect', () => {
         console.log('✓ Database pool connected');
     }
 });
+
+// ========== SECURITY MIDDLEWARE ==========
+// Helmet for security headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "https:"],
+        },
+    },
+    crossOriginEmbedderPolicy: false, // Allow cross-origin resources
+}));
+
+// Compression for responses
+app.use(compression());
+
+// Rate limiting - general API
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Stricter rate limiting for auth endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 auth requests per windowMs
+    message: { error: 'Too many authentication attempts, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Apply rate limiting to API routes
+app.use('/api/', apiLimiter);
+app.use('/auth/', authLimiter);
 
 // ========== LOGGING MIDDLEWARE ==========
 app.use((req, res, next) => {
@@ -456,22 +499,45 @@ app.get('/', (req, res) => {
     });
 });
 
-// Health endpoint for Render
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'OK',
-        service: 'TaskMaster Backend',
-        timestamp: new Date().toISOString()
-    });
+// Health endpoint for Render - with database check
+app.get('/health', async (req, res) => {
+    try {
+        // Check database connectivity
+        await pool.query('SELECT 1');
+        res.json({
+            status: 'OK',
+            service: 'TaskMaster Backend',
+            database: 'connected',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'ERROR',
+            service: 'TaskMaster Backend',
+            database: 'disconnected',
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
-// API Health endpoint
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        version: '1.0.0'
-    });
+// API Health endpoint - with database check
+app.get('/api/health', async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        res.json({
+            status: 'OK',
+            database: 'connected',
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'ERROR',
+            database: 'disconnected',
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        });
+    }
 });
 
 // Mock authentication for testing - inject before route checks
@@ -492,9 +558,37 @@ const ensureAuthenticated = (req, res, next) => {
     res.status(401).json({ error: 'Unauthorized' });
 };
 
+// ========== INPUT VALIDATION HELPERS ==========
+const VALID_PRIORITIES = ['low', 'medium', 'high'];
+const VALID_CATEGORIES = ['general', 'work', 'personal', 'shopping', 'health', 'finance', 'education', 'other'];
+
+const validatePriority = (priority) => {
+    if (priority && !VALID_PRIORITIES.includes(priority)) {
+        return `Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}`;
+    }
+    return null;
+};
+
+const validateCategory = (category) => {
+    // Allow any category but sanitize
+    if (category && (typeof category !== 'string' || category.length > 100)) {
+        return 'Category must be a string with max 100 characters';
+    }
+    return null;
+};
+
+const validateDueDate = (dueDate) => {
+    if (dueDate) {
+        const date = new Date(dueDate);
+        if (isNaN(date.getTime())) {
+            return 'Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)';
+        }
+    }
+    return null;
+};
+
 // Get all tasks for the current user
 app.get('/api/tasks', ensureAuthenticated, async (req, res) => {
-    console.log('GET /api/tasks - Headers:', req.headers);
     try {
         const result = await pool.query('SELECT * FROM tasks WHERE user_id = $1 ORDER BY id', [req.user.id]);
         res.json(result.rows);
@@ -506,11 +600,27 @@ app.get('/api/tasks', ensureAuthenticated, async (req, res) => {
 
 // Create new task for the current user
 app.post('/api/tasks', ensureAuthenticated, async (req, res) => {
-    console.log('POST /api/tasks - Body:', req.body);
     const { title, completed, priority, category, dueDate } = req.body;
 
+    // Validate required fields
     if (!title || title.trim() === '') {
         return res.status(400).json({ error: 'Task title is required' });
+    }
+
+    // Validate optional fields
+    const priorityError = validatePriority(priority);
+    if (priorityError) {
+        return res.status(400).json({ error: priorityError });
+    }
+
+    const categoryError = validateCategory(category);
+    if (categoryError) {
+        return res.status(400).json({ error: categoryError });
+    }
+
+    const dueDateError = validateDueDate(dueDate);
+    if (dueDateError) {
+        return res.status(400).json({ error: dueDateError });
     }
 
     try {
@@ -520,7 +630,6 @@ app.post('/api/tasks', ensureAuthenticated, async (req, res) => {
         );
         
         const newTask = result.rows[0];
-        console.log('Task created:', newTask);
         res.status(201).json(newTask);
     } catch (error) {
         console.error('Error creating task:', error);
@@ -530,8 +639,7 @@ app.post('/api/tasks', ensureAuthenticated, async (req, res) => {
 
 // Update task (PUT - full replacement) for the current user
 app.put('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
-    console.log('PUT /api/tasks/:id - Params:', req.params, 'Body:', req.body);
-    const taskId = parseInt(req.params.id);
+    const taskId = parseInt(req.params.id, 10);
     const { title, completed, priority, category, dueDate } = req.body;
 
     // Validate input
@@ -541,6 +649,17 @@ app.put('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
 
     if (title !== undefined && (!title || title.trim() === '')) {
         return res.status(400).json({ error: 'Task title is required' });
+    }
+
+    // Validate optional fields
+    const priorityError = validatePriority(priority);
+    if (priorityError) {
+        return res.status(400).json({ error: priorityError });
+    }
+
+    const dueDateError = validateDueDate(dueDate);
+    if (dueDateError) {
+        return res.status(400).json({ error: dueDateError });
     }
 
     try {
@@ -586,7 +705,6 @@ app.put('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
         }
 
         const updatedTask = result.rows[0];
-        console.log('Task updated:', updatedTask);
         res.json(updatedTask);
     } catch (error) {
         console.error('Error updating task:', error);
@@ -596,8 +714,7 @@ app.put('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
 
 // Delete task for the current user
 app.delete('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
-    console.log('DELETE /api/tasks/:id - Params:', req.params);
-    const taskId = parseInt(req.params.id);
+    const taskId = parseInt(req.params.id, 10);
     
     try {
         const result = await pool.query(
@@ -610,7 +727,6 @@ app.delete('/api/tasks/:id', ensureAuthenticated, async (req, res) => {
         }
 
         const deletedTask = result.rows[0];
-        console.log('Task deleted:', deletedTask);
         res.json({ message: 'Task deleted successfully', task: deletedTask });
     } catch (error) {
         console.error('Error deleting task:', error);

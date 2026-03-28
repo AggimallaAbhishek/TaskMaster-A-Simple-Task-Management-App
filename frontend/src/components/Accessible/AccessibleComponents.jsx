@@ -17,10 +17,13 @@ export const AccessibleButton = ({
   ariaDescribedBy,
   disabled = false,
   title,
-  className = '',
+  style = {},
   type = 'button',
   variant = 'primary', // 'primary', 'secondary', 'danger'
 }) => {
+  const [isFocused, setIsFocused] = React.useState(false);
+  const [isHovered, setIsHovered] = React.useState(false);
+  
   const handleKeyDown = (e) => {
     // Support both Enter and Space keys
     if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
@@ -30,9 +33,32 @@ export const AccessibleButton = ({
   };
 
   const variantStyles = {
-    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
-    secondary: 'bg-gray-300 hover:bg-gray-400 text-black',
-    danger: 'bg-red-500 hover:bg-red-600 text-white',
+    primary: {
+      backgroundColor: isHovered && !disabled ? '#2563eb' : '#3b82f6',
+      color: '#ffffff',
+    },
+    secondary: {
+      backgroundColor: isHovered && !disabled ? '#9ca3af' : '#d1d5db',
+      color: '#000000',
+    },
+    danger: {
+      backgroundColor: isHovered && !disabled ? '#dc2626' : '#ef4444',
+      color: '#ffffff',
+    },
+  };
+
+  const baseStyle = {
+    padding: '8px 16px',
+    borderRadius: '4px',
+    fontWeight: 500,
+    border: 'none',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.5 : 1,
+    outline: isFocused ? '2px solid #3b82f6' : 'none',
+    outlineOffset: '2px',
+    transition: 'background-color 0.2s, outline 0.2s',
+    ...variantStyles[variant],
+    ...style,
   };
 
   return (
@@ -43,15 +69,12 @@ export const AccessibleButton = ({
       aria-label={ariaLabel}
       aria-describedby={ariaDescribedBy}
       title={title}
-      className={`
-        px-4 py-2 rounded font-medium
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-        disabled:opacity-50 disabled:cursor-not-allowed
-        transition-colors
-        ${variantStyles[variant]}
-        ${className}
-      `}
+      style={baseStyle}
       onKeyDown={handleKeyDown}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {children}
     </button>
@@ -79,21 +102,50 @@ export const AccessibleInput = ({
   required = false,
   disabled = false,
   ariaDescribedBy,
-  className = '',
+  style = {},
   autoComplete,
 }) => {
+  const [isFocused, setIsFocused] = React.useState(false);
   const errorId = error ? `${id}-error` : undefined;
   const describedBy = [ariaDescribedBy, errorId].filter(Boolean).join(' ');
 
+  const containerStyle = {
+    marginBottom: '16px',
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#374151',
+    marginBottom: '4px',
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
+    borderRadius: '8px',
+    outline: isFocused ? '2px solid #3b82f6' : 'none',
+    outlineOffset: '2px',
+    backgroundColor: disabled ? '#f3f4f6' : '#ffffff',
+    cursor: disabled ? 'not-allowed' : 'text',
+    boxSizing: 'border-box',
+    ...style,
+  };
+
+  const errorStyle = {
+    marginTop: '4px',
+    fontSize: '14px',
+    color: '#dc2626',
+  };
+
   return (
-    <div className="mb-4">
+    <div style={containerStyle}>
       {label && (
-        <label
-          htmlFor={id}
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
+        <label htmlFor={id} style={labelStyle}>
           {label}
-          {required && <span aria-label="required">*</span>}
+          {required && <span aria-label="required" style={{ color: '#ef4444' }}> *</span>}
         </label>
       )}
       <input
@@ -106,16 +158,12 @@ export const AccessibleInput = ({
         aria-invalid={error ? 'true' : 'false'}
         aria-describedby={describedBy || undefined}
         autoComplete={autoComplete}
-        className={`
-          w-full px-3 py-2 border rounded-lg
-          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-          disabled:bg-gray-100 disabled:cursor-not-allowed
-          ${error ? 'border-red-500' : 'border-gray-300'}
-          ${className}
-        `}
+        style={inputStyle}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       />
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600" role="alert">
+        <p id={errorId} style={errorStyle} role="alert">
           {error}
         </p>
       )}
@@ -132,15 +180,28 @@ export const AccessibleInput = ({
  * - WCAG 2.1 AA requirement
  */
 export const SkipToMainContent = ({ mainId = 'main-content' }) => {
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  const linkStyle = {
+    position: 'absolute',
+    top: isFocused ? '0' : '-40px',
+    left: '0',
+    backgroundColor: '#2563eb',
+    color: '#ffffff',
+    padding: '8px 12px',
+    borderRadius: '4px',
+    textDecoration: 'none',
+    outline: 'none',
+    transition: 'top 0.2s',
+    zIndex: 50,
+  };
+
   return (
     <a
       href={`#${mainId}`}
-      className={`
-        absolute -top-10 left-0 bg-blue-600 text-white px-3 py-2 rounded
-        focus:top-0 focus:outline-none
-        transition-all duration-200
-        z-50
-      `}
+      style={linkStyle}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
     >
       Skip to main content
     </a>
@@ -164,19 +225,48 @@ export const AccessibleSelect = ({
   error,
   required = false,
   disabled = false,
-  className = '',
+  style = {},
 }) => {
+  const [isFocused, setIsFocused] = React.useState(false);
   const errorId = error ? `${id}-error` : undefined;
 
+  const containerStyle = {
+    marginBottom: '16px',
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#374151',
+    marginBottom: '4px',
+  };
+
+  const selectStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    border: `1px solid ${error ? '#ef4444' : '#d1d5db'}`,
+    borderRadius: '8px',
+    outline: isFocused ? '2px solid #3b82f6' : 'none',
+    outlineOffset: '2px',
+    backgroundColor: disabled ? '#f3f4f6' : '#ffffff',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    boxSizing: 'border-box',
+    ...style,
+  };
+
+  const errorStyle = {
+    marginTop: '4px',
+    fontSize: '14px',
+    color: '#dc2626',
+  };
+
   return (
-    <div className="mb-4">
+    <div style={containerStyle}>
       {label && (
-        <label
-          htmlFor={id}
-          className="block text-sm font-medium text-gray-700 mb-1"
-        >
+        <label htmlFor={id} style={labelStyle}>
           {label}
-          {required && <span aria-label="required">*</span>}
+          {required && <span aria-label="required" style={{ color: '#ef4444' }}> *</span>}
         </label>
       )}
       <select
@@ -186,13 +276,9 @@ export const AccessibleSelect = ({
         disabled={disabled}
         aria-invalid={error ? 'true' : 'false'}
         aria-describedby={errorId || undefined}
-        className={`
-          w-full px-3 py-2 border rounded-lg
-          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-          disabled:bg-gray-100 disabled:cursor-not-allowed
-          ${error ? 'border-red-500' : 'border-gray-300'}
-          ${className}
-        `}
+        style={selectStyle}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -201,7 +287,7 @@ export const AccessibleSelect = ({
         ))}
       </select>
       {error && (
-        <p id={errorId} className="mt-1 text-sm text-red-600" role="alert">
+        <p id={errorId} style={errorStyle} role="alert">
           {error}
         </p>
       )}
@@ -223,28 +309,50 @@ export const AccessibleCheckbox = ({
   checked,
   onChange,
   disabled = false,
-  className = '',
+  style = {},
 }) => {
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  const containerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    marginBottom: '12px',
+  };
+
+  const checkboxStyle = {
+    width: '20px',
+    height: '20px',
+    borderRadius: '4px',
+    border: '1px solid #d1d5db',
+    outline: isFocused ? '2px solid #3b82f6' : 'none',
+    outlineOffset: '2px',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.5 : 1,
+    ...style,
+  };
+
+  const labelStyle = {
+    marginLeft: '12px',
+    fontSize: '14px',
+    fontWeight: 500,
+    color: '#374151',
+    cursor: 'pointer',
+  };
+
   return (
-    <div className="flex items-center mb-3">
+    <div style={containerStyle}>
       <input
         type="checkbox"
         id={id}
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className={`
-          w-5 h-5 rounded border-gray-300
-          focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
-          disabled:opacity-50 disabled:cursor-not-allowed
-          ${className}
-        `}
+        style={checkboxStyle}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       />
       {label && (
-        <label
-          htmlFor={id}
-          className="ml-3 text-sm font-medium text-gray-700 cursor-pointer"
-        >
+        <label htmlFor={id} style={labelStyle}>
           {label}
         </label>
       )}
@@ -267,32 +375,45 @@ export const AccessibleAlert = ({
   onDismiss,
 }) => {
   const typeStyles = {
-    info: 'bg-blue-50 border-blue-200 text-blue-800',
-    success: 'bg-green-50 border-green-200 text-green-800',
-    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-    error: 'bg-red-50 border-red-200 text-red-800',
+    info: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' },
+    success: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' },
+    warning: { backgroundColor: '#fefce8', borderColor: '#fef08a', color: '#854d0e' },
+    error: { backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#991b1b' },
   };
 
   const role = type === 'error' || type === 'warning' ? 'alert' : 'status';
 
+  const alertStyle = {
+    padding: '16px',
+    borderLeft: `4px solid ${typeStyles[type].borderColor}`,
+    borderRadius: '4px',
+    backgroundColor: typeStyles[type].backgroundColor,
+    color: typeStyles[type].color,
+  };
+
+  const headerStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  };
+
+  const titleStyle = {
+    fontWeight: 'bold',
+    marginBottom: '4px',
+  };
+
   return (
-    <div
-      role={role}
-      className={`
-        p-4 border-l-4 rounded
-        ${typeStyles[type]}
-      `}
-    >
-      <div className="flex justify-between items-start">
+    <div role={role} style={alertStyle}>
+      <div style={headerStyle}>
         <div>
-          {title && <h3 className="font-bold mb-1">{title}</h3>}
+          {title && <h3 style={titleStyle}>{title}</h3>}
           <p>{message}</p>
         </div>
         {onDismiss && (
           <AccessibleButton
             onClick={onDismiss}
             ariaLabel="Close alert"
-            className="ml-2 px-2 py-1 text-sm"
+            style={{ marginLeft: '8px', padding: '4px 8px', fontSize: '14px' }}
           >
             ×
           </AccessibleButton>
