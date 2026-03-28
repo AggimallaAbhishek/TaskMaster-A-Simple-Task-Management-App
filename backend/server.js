@@ -314,6 +314,47 @@ app.get('/auth/google/callback',
     }
 );
 
+// Demo authentication route for development (when Google OAuth not configured)
+if (process.env.NODE_ENV !== 'production' && !process.env.GOOGLE_CLIENT_ID) {
+    app.get('/auth/demo', async (req, res) => {
+        try {
+            // Create or get demo user
+            let user = await pool.query('SELECT * FROM users WHERE email = $1', ['demo@taskmaster.local']);
+
+            if (user.rows.length === 0) {
+                // Create demo user
+                const result = await pool.query(
+                    'INSERT INTO users (username, email, picture) VALUES ($1, $2, $3) RETURNING *',
+                    ['Demo User', 'demo@taskmaster.local', null]
+                );
+                user = result;
+            }
+
+            // Manually create session
+            req.logIn(user.rows[0], (err) => {
+                if (err) {
+                    console.error('Login error:', err);
+                    return res.redirect('/?error=login_failed');
+                }
+                res.redirect('http://localhost:5173/');
+            });
+        } catch (error) {
+            console.error('Demo auth error:', error);
+            res.redirect('/?error=demo_auth_failed');
+        }
+    });
+
+    app.get('/auth/google', (req, res) => {
+        // Redirect to demo mode since Google OAuth not configured
+        res.redirect('/auth/demo');
+    });
+
+    app.get('/auth/google/callback', (req, res) => {
+        // Redirect to demo mode since Google OAuth not configured
+        res.redirect('/auth/demo');
+    });
+}
+
 app.get('/auth/logout', (req, res, next) => {
     req.logout(function(err) {
         if (err) { return next(err); }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, useTasks, useFilter, useProfile } from './hooks';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPanel } from './components/Auth/AuthPanel';
+import { LoginPage } from './components/Auth/LoginPage';
 import { TaskForm } from './components/Tasks/TaskForm';
 import { TaskList } from './components/Tasks/TaskList';
 import { ProfilePanel } from './components/Profile/ProfilePanel';
@@ -15,7 +16,7 @@ const API_URL =
     'https://taskmaster-a-simple-task-management-app.onrender.com';
 
 function AppContent() {
-    const { user, loading: authLoading, login, logout } = useAuth();
+    const { user, loading: authLoading, login, logout, error: authError } = useAuth();
     const { profile, loading: profileLoading, error: profileError, fetchProfile, updateProfile, deleteAvatar } = useProfile();
     const [tasks, setTasks] = useState([]);
     const { loading, error, setError, fetchTasks, addTask, updateTask, deleteTask } = useTasks(
@@ -139,6 +140,18 @@ function AppContent() {
         );
     }
 
+    // Show login page when not authenticated
+    if (!user) {
+        return (
+            <LoginPage
+                onGoogleLogin={login}
+                loading={authLoading}
+                error={authError}
+            />
+        );
+    }
+
+    // Show main app when authenticated
     return (
         <div
             style={{
@@ -215,17 +228,7 @@ function AppContent() {
             )}
 
             <main id="main-content">
-                {!user ? (
-                    <div
-                        style={{
-                            textAlign: 'center',
-                            padding: '20px',
-                            color: COLORS.TEXT_MUTED,
-                        }}
-                    >
-                        <p>Please log in to access your tasks</p>
-                    </div>
-                ) : currentPage === 'playground' ? (
+                {currentPage === 'playground' ? (
                     <PhysicsPlayground />
                 ) : (
                     <>

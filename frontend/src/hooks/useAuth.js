@@ -22,25 +22,62 @@ export function useAuth() {
             setUser(userData);
         } catch (err) {
             console.error('Auth check error:', err);
-            setError('Failed to check authentication status');
+            setError('');
             setUser(null);
         } finally {
             setLoading(false);
         }
     };
 
-    const login = () => {
-        const API_URL = import.meta.env.VITE_API_URL || 'https://taskmaster-a-simple-task-management-app.onrender.com';
-        window.location.href = `${API_URL}/auth/google`;
+    const login = async (demoMode = false) => {
+        try {
+            setLoading(true);
+            setError('');
+
+            if (demoMode) {
+                // Demo mode: create a demo user without OAuth
+                const demoUser = {
+                    id: 'demo-user',
+                    username: 'Demo User',
+                    email: 'demo@taskmaster.local',
+                    picture: null,
+                };
+                setUser(demoUser);
+                localStorage.setItem('demo_mode', 'true');
+                localStorage.setItem('demo_user', JSON.stringify(demoUser));
+            } else {
+                // Google OAuth mode
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                window.location.href = `${API_URL}/auth/google`;
+            }
+        } catch (err) {
+            console.error('Login error:', err);
+            setError('Failed to initiate login. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const logout = async () => {
         try {
-            await apiClient.logout();
-            setUser(null);
+            setLoading(true);
+            const isDemo = localStorage.getItem('demo_mode') === 'true';
+
+            if (isDemo) {
+                // Demo mode logout
+                localStorage.removeItem('demo_mode');
+                localStorage.removeItem('demo_user');
+                setUser(null);
+            } else {
+                // OAuth logout
+                await apiClient.logout();
+                setUser(null);
+            }
         } catch (err) {
             console.error('Logout error:', err);
             setError('Failed to logout');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -52,3 +89,4 @@ export function useAuth() {
         logout,
     };
 }
+
