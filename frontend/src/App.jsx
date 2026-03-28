@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthPanel } from './components/Auth/AuthPanel';
 import { TaskForm } from './components/Tasks/TaskForm';
 import { TaskList } from './components/Tasks/TaskList';
+import { SkipToMainContent } from './components/Accessible';
 import apiClient from './api/client';
 import { COLORS } from './styles/theme';
 
@@ -137,6 +138,8 @@ function AppContent() {
                 fontFamily: 'Arial',
             }}
         >
+            <SkipToMainContent mainId="main-content" />
+
             <AuthPanel
                 user={user}
                 loading={authLoading}
@@ -144,66 +147,68 @@ function AppContent() {
                 onLogout={logout}
             />
 
-            {!user ? (
-                <div
-                    style={{
-                        textAlign: 'center',
-                        padding: '20px',
-                        color: COLORS.TEXT_MUTED,
-                    }}
-                >
-                    <p>Please log in to access your tasks</p>
-                </div>
-            ) : (
-                <>
-                    <TaskForm
-                        title={newTask}
-                        onTitleChange={setNewTask}
-                        priority={newPriority}
-                        onPriorityChange={setNewPriority}
-                        category={newCategory}
-                        onCategoryChange={setNewCategory}
-                        dueDate={newDueDate}
-                        onDueDateChange={setNewDueDate}
-                        onSubmit={handleAddTask}
-                        onKeyPress={handleKeyPress}
-                        loading={loading}
-                    />
-
-                    <TaskList
-                        tasks={tasks}
-                        loading={loading}
-                        error={error}
-                        filter={filter}
-                        onFilterChange={setFilter}
-                        sortBy={sortBy}
-                        onSortByChange={setSortBy}
-                        sortDirection={sortDirection}
-                        onSortDirectionChange={setSortDirection}
-                        onResetFilters={resetFilters}
-                        filteredAndSortedTasks={filteredAndSortedTasks}
-                        editingTaskId={editingTaskId}
-                        editData={editData}
-                        onEditStart={handleEditStart}
-                        onEditChange={setEditData}
-                        onEditSave={handleEditSave}
-                        onEditCancel={() => {
-                            setEditingTaskId(null);
-                            setEditData({
-                                title: '',
-                                priority: 'medium',
-                                category: 'general',
-                                dueDate: '',
-                            });
+            <main id="main-content">
+                {!user ? (
+                    <div
+                        style={{
+                            textAlign: 'center',
+                            padding: '20px',
+                            color: COLORS.TEXT_MUTED,
                         }}
-                        onToggleComplete={handleToggleComplete}
-                        onUpdate={updateTask}
-                        onDelete={deleteTask}
-                        apiUrl={API_URL}
-                        onRetry={fetchTasks}
-                    />
-                </>
-            )}
+                    >
+                        <p>Please log in to access your tasks</p>
+                    </div>
+                ) : (
+                    <>
+                        <TaskForm
+                            title={newTask}
+                            onTitleChange={setNewTask}
+                            priority={newPriority}
+                            onPriorityChange={setNewPriority}
+                            category={newCategory}
+                            onCategoryChange={setNewCategory}
+                            dueDate={newDueDate}
+                            onDueDateChange={setNewDueDate}
+                            onSubmit={handleAddTask}
+                            onKeyPress={handleKeyPress}
+                            loading={loading}
+                        />
+
+                        <TaskList
+                            tasks={tasks}
+                            loading={loading}
+                            error={error}
+                            filter={filter}
+                            onFilterChange={setFilter}
+                            sortBy={sortBy}
+                            onSortByChange={setSortBy}
+                            sortDirection={sortDirection}
+                            onSortDirectionChange={setSortDirection}
+                            onResetFilters={resetFilters}
+                            filteredAndSortedTasks={filteredAndSortedTasks}
+                            editingTaskId={editingTaskId}
+                            editData={editData}
+                            onEditStart={handleEditStart}
+                            onEditChange={setEditData}
+                            onEditSave={handleEditSave}
+                            onEditCancel={() => {
+                                setEditingTaskId(null);
+                                setEditData({
+                                    title: '',
+                                    priority: 'medium',
+                                    category: 'general',
+                                    dueDate: '',
+                                });
+                            }}
+                            onToggleComplete={handleToggleComplete}
+                            onUpdate={updateTask}
+                            onDelete={deleteTask}
+                            apiUrl={API_URL}
+                            onRetry={fetchTasks}
+                        />
+                    </>
+                )}
+            </main>
         </div>
     );
 }
