@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { COLORS, COMMON_STYLES, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../styles/theme';
 
 export function TaskForm({
@@ -14,8 +14,26 @@ export function TaskForm({
     onKeyPress,
     loading,
 }) {
+    // Use useCallback to prevent unnecessary re-renders
+    const handleTitleChange = useCallback((e) => onTitleChange(e.target.value), [onTitleChange]);
+    const handlePriorityChange = useCallback((e) => onPriorityChange(e.target.value), [onPriorityChange]);
+    const handleCategoryChange = useCallback((e) => onCategoryChange(e.target.value), [onCategoryChange]);
+    const handleDueDateChange = useCallback((e) => onDueDateChange(e.target.value), [onDueDateChange]);
+
+    const labelStyle = {
+        display: 'block',
+        fontSize: '12px',
+        fontWeight: 500,
+        color: COLORS.TEXT_MUTED,
+        marginBottom: '4px',
+    };
+
     return (
-        <div style={{ marginBottom: '20px' }}>
+        <form 
+            onSubmit={(e) => { e.preventDefault(); onSubmit(); }} 
+            style={{ marginBottom: '20px' }}
+            aria-label="Add new task form"
+        >
             <div
                 style={{
                     display: 'grid',
@@ -24,10 +42,14 @@ export function TaskForm({
                 }}
             >
                 <div>
+                    <label htmlFor="task-title" style={labelStyle}>
+                        Task Title
+                    </label>
                     <input
+                        id="task-title"
                         type="text"
                         value={title}
-                        onChange={(e) => onTitleChange(e.target.value)}
+                        onChange={handleTitleChange}
                         onKeyPress={onKeyPress}
                         placeholder="Enter a new task..."
                         style={{
@@ -35,18 +57,28 @@ export function TaskForm({
                             ...COMMON_STYLES.input,
                         }}
                         disabled={loading}
+                        aria-required="true"
+                        aria-describedby="task-title-hint"
                     />
+                    <span id="task-title-hint" style={{ display: 'none' }}>
+                        Press Enter to quickly add task
+                    </span>
                 </div>
 
                 <div>
+                    <label htmlFor="task-priority" style={labelStyle}>
+                        Priority
+                    </label>
                     <select
+                        id="task-priority"
                         value={priority}
-                        onChange={(e) => onPriorityChange(e.target.value)}
+                        onChange={handlePriorityChange}
                         style={{
                             width: '100%',
                             ...COMMON_STYLES.input,
                         }}
                         disabled={loading}
+                        aria-label="Select task priority"
                     >
                         {PRIORITY_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -57,14 +89,19 @@ export function TaskForm({
                 </div>
 
                 <div>
+                    <label htmlFor="task-category" style={labelStyle}>
+                        Category
+                    </label>
                     <select
+                        id="task-category"
                         value={category}
-                        onChange={(e) => onCategoryChange(e.target.value)}
+                        onChange={handleCategoryChange}
                         style={{
                             width: '100%',
                             ...COMMON_STYLES.input,
                         }}
                         disabled={loading}
+                        aria-label="Select task category"
                     >
                         {CATEGORY_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -75,21 +112,26 @@ export function TaskForm({
                 </div>
 
                 <div>
+                    <label htmlFor="task-due-date" style={labelStyle}>
+                        Due Date
+                    </label>
                     <input
+                        id="task-due-date"
                         type="date"
                         value={dueDate}
-                        onChange={(e) => onDueDateChange(e.target.value)}
+                        onChange={handleDueDateChange}
                         style={{
                             width: '100%',
                             ...COMMON_STYLES.input,
                         }}
                         disabled={loading}
+                        aria-label="Select due date"
                     />
                 </div>
             </div>
 
             <button
-                onClick={onSubmit}
+                type="submit"
                 disabled={loading}
                 style={{
                     width: '100%',
@@ -100,9 +142,11 @@ export function TaskForm({
                     marginTop: '10px',
                     cursor: loading ? 'not-allowed' : 'pointer',
                 }}
+                aria-busy={loading}
+                aria-label={loading ? 'Adding task...' : 'Add task'}
             >
                 {loading ? 'Adding...' : 'Add Task'}
             </button>
-        </div>
+        </form>
     );
 }
