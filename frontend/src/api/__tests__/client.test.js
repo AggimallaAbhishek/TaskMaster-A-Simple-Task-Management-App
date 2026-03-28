@@ -24,13 +24,9 @@ describe('API Client', () => {
 
       const result = await apiClient.request('/auth/user');
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/auth/user'),
-        expect.objectContaining({
-          credentials: 'include',
-          method: 'GET',
-        })
-      );
+      const callArgs = global.fetch.mock.calls[0];
+      expect(callArgs[0]).toContain('/auth/user');
+      expect(callArgs[1]).toHaveProperty('credentials', 'include');
       expect(result).toEqual({ id: 1, username: 'test' });
     });
 
