@@ -8,43 +8,108 @@ const PgSession = require('connect-pg-simple')(session);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// PostgreSQL database connection - define early for session store
+// ========== ENVIRONMENT VALIDATION ==========
+const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_NAME', 'SESSION_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0 && process.env.NODE_ENV === 'production') {
+    console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+    process.exit(1);
+}
+
+// ========== DATABASE CONFIGURATION WITH POOLING ==========
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
     user: process.env.DB_USER || 'aggimallaabhishek',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'taskmaster'
+    database: process.env.DB_NAME || 'taskmaster',
+
+    // Connection pooling configuration
+    min: parseInt(process.env.DB_POOL_MIN || '2'),
+    max: parseInt(process.env.DB_POOL_MAX || '10'),
+    idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000'),
+    connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000'),
 });
 
-// Enhanced CORS middleware - FIXED FOR PREFLIGHT
+// Database connection pool event handlers
+pool.on('error', (err) => {
+    console.error('❌ Unexpected error on idle client:', err);
+});
+
+pool.on('connect', () => {
+    if (process.env.LOG_LEVEL === 'debug') {
+        console.log('✓ Database pool connected');
+    }
+});
+
+// ========== LOGGING MIDDLEWARE ==========
 app.use((req, res, next) => {
-    const allowedOrigins = [
-        'https://task-master-a-simple-task-management-7v04ickra.vercel.app',
-        'https://task-master-a-simple-task-managemen.vercel.app',
-        'http://localhost:5173',
-        'http://localhost:3000'
-    ];
+    const startTime = Date.now();
+
+    res.on('finish', () => {
+        const duration = Date.now() - startTime;
+        const logMessage = {
+            timestamp: new Date().toISOString(),
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            duration: `${duration}ms`,
+            user: req.user?.id || 'anonymous',
+        };
+
+        if (process.env.LOG_FORMAT === 'json') {
+            console.log(JSON.stringify(logMessage));
+        } else if (process.env.LOG_LEVEL !== 'silent') {
+            console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+        }
+    });
+
+    next();
+});
+
+// Enhanced CORS middleware - Respects environment variables
+app.use((req, res, next) => {
+    const allowedOrigins = [];
+
+    // Build allowed origins from environment variables
+    if (process.env.CORS_ORIGIN) {
+        allowedOrigins.push(process.env.CORS_ORIGIN);
+    }
+    if (process.env.FRONTEND_URL_DEV && process.env.NODE_ENV === 'development') {
+        allowedOrigins.push(process.env.FRONTEND_URL_DEV);
+    }
+    if (process.env.FRONTEND_URL_PROD) {
+        allowedOrigins.push(process.env.FRONTEND_URL_PROD);
+    }
+
+    // Default development origins
+    if (process.env.NODE_ENV === 'development') {
+        allowedOrigins.push('http://localhost:5173', 'http://localhost:3000');
+    }
 
     const origin = req.headers.origin;
 
-    // Allow the requesting origin if it's in the list, otherwise allow all (for testing)
-    if (allowedOrigins.includes(origin)) {
+    // Allow the requesting origin if it's in the list
+    if (origin && allowedOrigins.includes(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
-    } else {
-        // For development/testing, you might want to be more restrictive
+        res.header('Access-Control-Allow-Credentials', 'true');
+    } else if (process.env.NODE_ENV === 'development') {
+        // Development: allow all for easier testing (can be restricted later)
         res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Credentials', 'true');
     }
 
     res.header('Access-Control-Allow-Headers',
         'Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400'); // 24 hours
 
-    // INTERCEPT OPTIONS METHOD - THIS IS THE KEY FIX
+    // Handle OPTIONS preflight requests
     if (req.method === 'OPTIONS') {
-        console.log('OPTIONS preflight received');
+        if (process.env.LOG_LEVEL === 'debug') {
+            console.log('✓ CORS preflight request received for', req.headers.origin || '*');
+        }
         res.header('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '*');
         return res.status(200).end();
     }
