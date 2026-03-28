@@ -1,5 +1,5 @@
 import React from 'react';
-import { COLORS, COMMON_STYLES, PRIORITY_OPTIONS, CATEGORY_OPTIONS, getPriorityColor } from '../styles/theme';
+import { COLORS, COMMON_STYLES, PRIORITY_OPTIONS, CATEGORY_OPTIONS, getPriorityColor } from '../../styles/theme';
 
 export function TaskItem({
     task,

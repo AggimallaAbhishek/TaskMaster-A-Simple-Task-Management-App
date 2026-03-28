@@ -1,5 +1,5 @@
 import React from 'react';
-import { COLORS, COMMON_STYLES, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../styles/theme';
+import { COLORS, COMMON_STYLES, PRIORITY_OPTIONS, CATEGORY_OPTIONS } from '../../styles/theme';
 
 export function FilterPanel({
     filter,

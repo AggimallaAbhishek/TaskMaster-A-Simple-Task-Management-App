@@ -1,5 +1,5 @@
 import React from 'react';
-import { COLORS } from '../styles/theme';
+import { COLORS } from '../../styles/theme';
 
 export function AuthPanel({ user, loading, onLogin, onLogout }) {
     return (
