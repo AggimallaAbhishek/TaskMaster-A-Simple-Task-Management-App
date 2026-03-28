@@ -68,15 +68,16 @@ app.use((req, res, next) => {
     next();
 });
 
-// Enhanced CORS middleware - Respects environment variables
+// Enhanced CORS middleware - Always set headers for proper cross-origin requests
 app.use((req, res, next) => {
     const allowedOrigins = [];
+    const isDevelopment = process.env.NODE_ENV !== 'production';
 
     // Build allowed origins from environment variables
     if (process.env.CORS_ORIGIN) {
         allowedOrigins.push(process.env.CORS_ORIGIN);
     }
-    if (process.env.FRONTEND_URL_DEV && process.env.NODE_ENV === 'development') {
+    if (process.env.FRONTEND_URL_DEV && isDevelopment) {
         allowedOrigins.push(process.env.FRONTEND_URL_DEV);
     }
     if (process.env.FRONTEND_URL_PROD) {
@@ -84,22 +85,30 @@ app.use((req, res, next) => {
     }
 
     // Default development origins
-    if (process.env.NODE_ENV === 'development') {
+    if (isDevelopment) {
         allowedOrigins.push('http://localhost:5173', 'http://localhost:3000');
     }
 
     const origin = req.headers.origin;
 
-    // Allow the requesting origin if it's in the list
+    // Determine the origin to send back
+    let corsOrigin = '*'; // Default to wildcard for development
+    let credentials = 'true';
+
     if (origin && allowedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-    } else if (process.env.NODE_ENV === 'development') {
-        // Development: allow all for easier testing (can be restricted later)
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Credentials', 'true');
+        // Specific origin allowed
+        corsOrigin = origin;
+    } else if (isDevelopment) {
+        // Development: allow all
+        corsOrigin = '*';
+    } else if (allowedOrigins.length > 0) {
+        // Production: only set if origin is in list
+        corsOrigin = allowedOrigins[0] || '*';
     }
 
+    // Always set CORS headers for development/testing
+    res.header('Access-Control-Allow-Origin', corsOrigin);
+    res.header('Access-Control-Allow-Credentials', credentials);
     res.header('Access-Control-Allow-Headers',
         'Content-Type, Authorization, X-Requested-With, X-HTTP-Method-Override, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -108,7 +117,7 @@ app.use((req, res, next) => {
     // Handle OPTIONS preflight requests
     if (req.method === 'OPTIONS') {
         if (process.env.LOG_LEVEL === 'debug') {
-            console.log('✓ CORS preflight request received for', req.headers.origin || '*');
+            console.log('✓ CORS preflight request received for', origin || '*');
         }
         res.header('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '*');
         return res.status(200).end();
