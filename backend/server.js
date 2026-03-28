@@ -140,6 +140,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 const initializeDatabase = async () => {
     try {
         // Drop tables in reverse order of dependencies
+        await pool.query('DROP TABLE IF EXISTS filter_presets');
         await pool.query('DROP TABLE IF EXISTS tasks');
         await pool.query('DROP TABLE IF EXISTS users');
 
@@ -172,6 +173,20 @@ const initializeDatabase = async () => {
                 user_id INTEGER REFERENCES users(id),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create filter_presets table for saving custom filters
+        await pool.query(`
+            CREATE TABLE filter_presets (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                filter_config JSONB DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, name)
             )
         `);
 
@@ -485,6 +500,168 @@ app.delete('/api/users/avatar', ensureAuthenticated, async (req, res) => {
         res.json({ message: 'Avatar deleted successfully', user: result.rows[0] });
     } catch (error) {
         console.error('Error deleting avatar:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ===== FILTER PRESETS ENDPOINTS =====
+
+// GET /api/filter-presets - Get all presets for authenticated user
+app.get('/api/filter-presets', ensureAuthenticated, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM filter_presets WHERE user_id = $1 ORDER BY updated_at DESC',
+            [req.user.id]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching filter presets:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/filter-presets - Create new filter preset
+app.post('/api/filter-presets', ensureAuthenticated, async (req, res) => {
+    try {
+        const { name, description, filter_config } = req.body;
+
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ error: 'Preset name is required' });
+        }
+
+        const result = await pool.query(
+            'INSERT INTO filter_presets (user_id, name, description, filter_config) VALUES ($1, $2, $3, $4) RETURNING *',
+            [req.user.id, name.trim(), description || null, filter_config || {}]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ error: 'Preset with this name already exists' });
+        }
+        console.error('Error creating filter preset:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// PUT /api/filter-presets/:id - Update filter preset
+app.put('/api/filter-presets/:id', ensureAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, description, filter_config } = req.body;
+
+        // Verify preset belongs to user
+        const presetCheck = await pool.query(
+            'SELECT * FROM filter_presets WHERE id = $1 AND user_id = $2',
+            [id, req.user.id]
+        );
+
+        if (presetCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Preset not found' });
+        }
+
+        const result = await pool.query(
+            'UPDATE filter_presets SET name = COALESCE($1, name), description = COALESCE($2, description), filter_config = COALESCE($3, filter_config), updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND user_id = $5 RETURNING *',
+            [name || null, description || null, filter_config || null, id, req.user.id]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(409).json({ error: 'Preset name already exists' });
+        }
+        console.error('Error updating filter preset:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// DELETE /api/filter-presets/:id - Delete filter preset
+app.delete('/api/filter-presets/:id', ensureAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await pool.query(
+            'DELETE FROM filter_presets WHERE id = $1 AND user_id = $2 RETURNING *',
+            [id, req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Preset not found' });
+        }
+
+        res.json({ message: 'Preset deleted successfully', preset: result.rows[0] });
+    } catch (error) {
+        console.error('Error deleting filter preset:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/filter-presets/:id/apply - Apply filter preset and return filtered tasks
+app.post('/api/filter-presets/:id/apply', ensureAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get the preset
+        const presetResult = await pool.query(
+            'SELECT * FROM filter_presets WHERE id = $1 AND user_id = $2',
+            [id, req.user.id]
+        );
+
+        if (presetResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Preset not found' });
+        }
+
+        const preset = presetResult.rows[0];
+        const filterConfig = preset.filter_config || {};
+
+        // Build dynamic query based on filter config
+        let query = 'SELECT * FROM tasks WHERE user_id = $1';
+        const params = [req.user.id];
+        let paramCount = 2;
+
+        // Apply filters
+        if (filterConfig.completed !== undefined) {
+            query += ` AND completed = $${paramCount}`;
+            params.push(filterConfig.completed);
+            paramCount++;
+        }
+
+        if (filterConfig.priority) {
+            query += ` AND priority = $${paramCount}`;
+            params.push(filterConfig.priority);
+            paramCount++;
+        }
+
+        if (filterConfig.category) {
+            query += ` AND category = $${paramCount}`;
+            params.push(filterConfig.category);
+            paramCount++;
+        }
+
+        if (filterConfig.dueDateFrom) {
+            query += ` AND due_date >= $${paramCount}`;
+            params.push(filterConfig.dueDateFrom);
+            paramCount++;
+        }
+
+        if (filterConfig.dueDateTo) {
+            query += ` AND due_date <= $${paramCount}`;
+            params.push(filterConfig.dueDateTo);
+            paramCount++;
+        }
+
+        // Apply sort
+        if (filterConfig.sortBy) {
+            const sortDir = filterConfig.sortDirection === 'desc' ? 'DESC' : 'ASC';
+            query += ` ORDER BY ${filterConfig.sortBy} ${sortDir}`;
+        } else {
+            query += ' ORDER BY created_at DESC';
+        }
+
+        const tasksResult = await pool.query(query, params);
+        res.json({ preset: preset, tasks: tasksResult.rows });
+    } catch (error) {
+        console.error('Error applying filter preset:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

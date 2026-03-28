@@ -14,6 +14,7 @@ beforeAll(async () => {
 
     try {
         // Drop tables in reverse order of dependencies
+        await testPool.query('DROP TABLE IF EXISTS filter_presets');
         await testPool.query('DROP TABLE IF EXISTS tasks');
         await testPool.query('DROP TABLE IF EXISTS users');
 
@@ -46,6 +47,20 @@ beforeAll(async () => {
                 user_id INTEGER REFERENCES users(id),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Create filter_presets table
+        await testPool.query(`
+            CREATE TABLE filter_presets (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                filter_config JSONB DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, name)
             )
         `);
 

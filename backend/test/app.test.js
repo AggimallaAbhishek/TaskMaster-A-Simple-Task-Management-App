@@ -242,3 +242,83 @@ describe('TaskMaster API', () => {
         expect(res.body.bio).toEqual('New bio');
     });
 });
+
+describe('Filter Presets Endpoints', () => {
+    let presetId;
+
+    it('should create a filter preset', async () => {
+        const res = await request(app)
+            .post('/api/filter-presets')
+            .send({
+                name: 'High priority tasks',
+                description: 'All high priority tasks',
+                filter_config: {
+                    priority: 'high',
+                    completed: false
+                }
+            });
+
+        expect(res.statusCode).toEqual(201);
+        expect(res.body.name).toEqual('High priority tasks');
+        expect(res.body.filter_config.priority).toEqual('high');
+        presetId = res.body.id;
+    });
+
+    it('should get all filter presets for user', async () => {
+        const res = await request(app)
+            .get('/api/filter-presets');
+
+        expect(res.statusCode).toEqual(200);
+        expect(Array.isArray(res.body)).toBe(true);
+        expect(res.body.length).toBeGreaterThan(0);
+        expect(res.body.some(p => p.name === 'High priority tasks')).toBe(true);
+    });
+
+    it('should update filter preset', async () => {
+        const res = await request(app)
+            .put(`/api/filter-presets/${presetId}`)
+            .send({
+                description: 'Updated description',
+                filter_config: {
+                    priority: 'urgent',
+                    completed: false
+                }
+            });
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.description).toEqual('Updated description');
+        expect(res.body.filter_config.priority).toEqual('urgent');
+    });
+
+    it('should apply filter preset and return filtered tasks', async () => {
+        // Create a task with high priority
+        await request(app)
+            .post('/api/tasks')
+            .send({
+                title: 'Urgent task',
+                priority: 'urgent',
+                completed: false
+            });
+
+        const res = await request(app)
+            .post(`/api/filter-presets/${presetId}/apply`);
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.preset).toBeDefined();
+        expect(Array.isArray(res.body.tasks)).toBe(true);
+    });
+
+    it('should delete filter preset', async () => {
+        const res = await request(app)
+            .delete(`/api/filter-presets/${presetId}`);
+
+        expect(res.statusCode).toEqual(200);
+        expect(res.body.message).toEqual('Preset deleted successfully');
+
+        // Verify preset deleted
+        const getRes = await request(app)
+            .get('/api/filter-presets');
+
+        expect(getRes.body.some(p => p.id === presetId)).toBe(false);
+    });
+});
