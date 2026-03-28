@@ -142,10 +142,11 @@ function AppContent() {
     return (
         <div
             style={{
-                padding: '20px',
-                maxWidth: '600px',
-                margin: '0 auto',
-                fontFamily: 'Arial',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: '100vh',
+                backgroundColor: '#f5f5f5',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             }}
         >
             <SkipToMainContent mainId="main-content" />
@@ -157,6 +158,16 @@ function AppContent() {
                 onLogout={logout}
                 onSettings={() => setShowProfilePanel(true)}
             />
+
+            <div
+                style={{
+                    flex: 1,
+                    padding: '20px',
+                    maxWidth: '1000px',
+                    margin: '0 auto',
+                    width: '100%',
+                }}
+            >
 
             {/* Page Navigation Buttons */}
             {user && (
@@ -337,6 +348,7 @@ function AppContent() {
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }
